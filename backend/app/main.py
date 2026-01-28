@@ -72,20 +72,45 @@ def get_questions():
 
 @app.post("/responses")
 def create_response(payload: ResponseIn):
-    # 1) crear 
+    # Validar branch
+    branch = fetch_one("SELECT id FROM branches WHERE id = ?", (payload.branch_id,))
+    if not branch:
+        raise HTTPException(status_code=400, detail="branch_id inválido (no existe).")
+
+    # Validar cantidad de respuestas (máx 5)
+    if len(payload.answers) == 0:
+        raise HTTPException(status_code=400, detail="Debe enviar al menos una respuesta.")
+    if len(payload.answers) > 5:
+        raise HTTPException(status_code=400, detail="Máximo 5 respuestas por encuesta.")
+
+    # Validar que las preguntas existan y estén en el set permitido (las primeras 5)
+    allowed_questions = fetch_all("SELECT id FROM questions ORDER BY id LIMIT 5")
+    allowed_ids = {q["id"] for q in allowed_questions}
+
+    for ans in payload.answers:
+        if ans.question_id not in allowed_ids:
+            raise HTTPException(
+                status_code=400,
+                detail=f"question_id inválido o fuera de las primeras 5 preguntas: {ans.question_id}"
+            )
+        if not ans.value or not ans.value.strip():
+            raise HTTPException(status_code=400, detail="No se permiten respuestas vacías.")
+
+    # Crear survey_response
     response_id = execute(
         "INSERT INTO survey_responses (branch_id, created_at) VALUES (?, datetime('now'))",
         (payload.branch_id,),
     )
 
-    # 2) insertar respuestas
+    # Insertar answers
     for ans in payload.answers:
         execute(
             "INSERT INTO answers (survey_response_id, question_id, value) VALUES (?, ?, ?)",
-            (response_id, ans.question_id, ans.value),
+            (response_id, ans.question_id, ans.value.strip()),
         )
 
     return {"message": "Saved", "survey_response_id": response_id}
+
 
 @app.get("/export")
 def export_results():
