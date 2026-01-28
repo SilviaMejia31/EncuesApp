@@ -1,4 +1,4 @@
-# Backend - Survey System
+# Backend - EncuesApp
 
 Este backend está desarrollado en Python utilizando FastAPI.
 Provee una API REST para gestionar encuestas y almacenar respuestas.
