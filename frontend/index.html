@@ -1,1 +1,46 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Encuesta</title>
+  <link rel="stylesheet" href="./styles.css" />
+</head>
+<body>
+  <div class="container">
+    <h1>Sistema de Encuestas</h1>
+
+    <div class="card">
+      <h2>1) Selección</h2>
+
+      <label>País</label>
+      <select id="countrySelect">
+        <option value="">Cargando...</option>
+      </select>
+
+      <label>Empresa</label>
+      <select id="companySelect" disabled>
+        <option value="">Seleccione un país</option>
+      </select>
+
+      <label>Sede</label>
+      <select id="branchSelect" disabled>
+        <option value="">Seleccione una empresa</option>
+      </select>
+    </div>
+
+    <div class="card">
+      <h2>2) Encuesta</h2>
+      <div id="questionsArea" class="muted">Seleccione una sede para cargar preguntas.</div>
+
+      <button id="submitBtn" disabled>Enviar encuesta</button>
+      <a id="exportLink" class="link" href="#" target="_blank">Exportar resultados (CSV)</a>
+
+      <div id="status" class="status"></div>
+    </div>
+  </div>
+
+  <script src="./app.js"></script>
+</body>
+</html>
 
