@@ -1,0 +1,14 @@
+body { font-family: Arial, sans-serif; background:#f6f6f6; margin:0; }
+.container { max-width: 720px; margin: 24px auto; padding: 0 12px; }
+.card { background:#fff; border-radius: 10px; padding: 16px; margin: 12px 0; box-shadow: 0 2px 8px rgba(0,0,0,.06); }
+label { display:block; margin-top: 10px; font-weight: 600; }
+select, input { width: 100%; padding: 10px; margin-top: 6px; border-radius: 8px; border: 1px solid #ddd; }
+button { margin-top: 14px; width:100%; padding: 12px; border:0; border-radius: 8px; background:#111; color:#fff; cursor:pointer; }
+button:disabled { opacity:.5; cursor:not-allowed; }
+.muted { color:#666; }
+.status { margin-top: 10px; font-size: 14px; }
+.status.ok { color: #0a7b34; }
+.status.err { color: #b00020; }
+.link { display:inline-block; margin-top: 10px; }
+.question { margin: 10px 0; padding: 10px; border: 1px solid #eee; border-radius: 8px; }
+.small { font-size: 13px; color:#444; margin-top: 6px; }
