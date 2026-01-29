@@ -54,132 +54,99 @@ def root():
 
 @app.get("/countries")
 def get_countries():
-    return fetch_all("SELECT id, name FROM countries ORDER BY name")
+    t = catalog_table()
+    resp = t.query(
+        KeyConditionExpression="pk = :pk",
+        ExpressionAttributeValues={":pk": "COUNTRY"},
+    )
+    items = resp.get("Items", [])
+    return [{"id": it["sk"], "name": it["name"]} for it in items]
 
 @app.get("/companies")
-def get_companies(country_id: int):
-    return fetch_all(
-        "SELECT id, name, country_id FROM companies WHERE country_id = ? ORDER BY name",
-        (country_id,),
+def get_companies(country_id: str):
+    t = catalog_table()
+    resp = t.query(
+        KeyConditionExpression="pk = :pk",
+        ExpressionAttributeValues={":pk": f"COMPANY#{country_id}"},
     )
+    items = resp.get("Items", [])
+    return [{"id": it["sk"], "name": it["name"], "country_id": country_id} for it in items]
 
 @app.get("/branches")
-def get_branches(company_id: int):
-    return fetch_all(
-        "SELECT id, name, company_id FROM branches WHERE company_id = ? ORDER BY name",
-        (company_id,),
+def get_branches(company_id: str):
+    t = catalog_table()
+    resp = t.query(
+        KeyConditionExpression="pk = :pk",
+        ExpressionAttributeValues={":pk": f"BRANCH#{company_id}"},
     )
+    items = resp.get("Items", [])
+    return [{"id": it["sk"], "name": it["name"], "company_id": company_id} for it in items]
 
 @app.get("/questions")
 def get_questions():
-    # max 5 preguntas
-    return fetch_all("SELECT id, text FROM questions ORDER BY id LIMIT 5")
+    t = catalog_table()
+    resp = t.query(
+        KeyConditionExpression="pk = :pk",
+        ExpressionAttributeValues={":pk": "QUESTION"},
+    )
+    items = sorted(resp.get("Items", []), key=lambda x: int(x["sk"]))
+    items = items[:5]
+    return [{"id": int(it["sk"]), "text": it["text"]} for it in items]
+
 
 @app.post("/responses")
 def create_response(payload: ResponseIn):
-    # Validar branch
-    branch = fetch_one("SELECT id FROM branches WHERE id = ?", (payload.branch_id,))
-    if not branch:
-        raise HTTPException(status_code=400, detail="branch_id inválido (no existe).")
-
-    # Validar cantidad de respuestas (máx 5)
-    if len(payload.answers) == 0:
+    if not payload.branch_id:
+        raise HTTPException(status_code=400, detail="branch_id requerido.")
+    if not payload.answers or len(payload.answers) == 0:
         raise HTTPException(status_code=400, detail="Debe enviar al menos una respuesta.")
     if len(payload.answers) > 5:
-        raise HTTPException(status_code=400, detail="Máximo 5 respuestas por encuesta.")
+        raise HTTPException(status_code=400, detail="Máximo 5 respuestas.")
 
-    # Validar que las preguntas existan y estén en el set permitido (las primeras 5)
-    allowed_questions = fetch_all("SELECT id FROM questions ORDER BY id LIMIT 5")
-    allowed_ids = {q["id"] for q in allowed_questions}
+    now = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+    survey_response_id = f"{payload.branch_id}#{now}"
 
-    for ans in payload.answers:
-        if ans.question_id not in allowed_ids:
-            raise HTTPException(
-                status_code=400,
-                detail=f"question_id inválido o fuera de las primeras 5 preguntas: {ans.question_id}"
-            )
-        if not ans.value or not ans.value.strip():
-            raise HTTPException(status_code=400, detail="No se permiten respuestas vacías.")
+    item = {
+        "branch_id": str(payload.branch_id),
+        "created_at": now,
+        "survey_response_id": survey_response_id,
+        "answers": [{"question_id": a.question_id, "value": a.value} for a in payload.answers],
+    }
 
-    # Crear survey_response
-    response_id = execute(
-        "INSERT INTO survey_responses (branch_id, created_at) VALUES (?, datetime('now'))",
-        (payload.branch_id,),
-    )
+    t = responses_table()
+    t.put_item(Item=item)
 
-    # Insertar answers
-    for ans in payload.answers:
-        execute(
-            "INSERT INTO answers (survey_response_id, question_id, value) VALUES (?, ?, ?)",
-            (response_id, ans.question_id, ans.value.strip()),
-        )
-
-    return {"message": "Saved", "survey_response_id": response_id}
-
+    return {"message": "Saved", "survey_response_id": survey_response_id}
 
 @app.get("/export")
 def export_results():
-    conn = get_connection()
-    cur = conn.cursor()
+    import csv, io
+    from fastapi.responses import StreamingResponse
 
-    # Traemos todo “aplanado” para CSV:
-    # una fila por respuesta a una pregunta
-    cur.execute("""
-        SELECT
-            sr.id AS survey_response_id,
-            sr.created_at,
-            c.name AS country,
-            co.name AS company,
-            b.name AS branch,
-            q.id AS question_id,
-            q.text AS question_text,
-            a.value AS answer_value
-        FROM survey_responses sr
-        JOIN branches b ON b.id = sr.branch_id
-        JOIN companies co ON co.id = b.company_id
-        JOIN countries c ON c.id = co.country_id
-        JOIN answers a ON a.survey_response_id = sr.id
-        JOIN questions q ON q.id = a.question_id
-        ORDER BY sr.id, q.id
-    """)
-    rows = cur.fetchall()
-    conn.close()
+    t = responses_table()
+    resp = t.scan()
+    items = resp.get("Items", [])
 
-    # Armamos CSV en memoria
     output = io.StringIO()
     writer = csv.writer(output)
+    writer.writerow(["survey_response_id", "branch_id", "created_at", "question_id", "answer_value"])
 
-    # Encabezados
-    writer.writerow([
-        "survey_response_id",
-        "created_at",
-        "country",
-        "company",
-        "branch",
-        "question_id",
-        "question_text",
-        "answer_value"
-    ])
-
-    # Filas
-    for r in rows:
-        writer.writerow([
-            r["survey_response_id"],
-            r["created_at"],
-            r["country"],
-            r["company"],
-            r["branch"],
-            r["question_id"],
-            r["question_text"],
-            r["answer_value"]
-        ])
+    for it in items:
+        for ans in it.get("answers", []):
+            writer.writerow([
+                it.get("survey_response_id", ""),
+                it.get("branch_id", ""),
+                it.get("created_at", ""),
+                ans.get("question_id", ""),
+                ans.get("value", ""),
+            ])
 
     output.seek(0)
-
-    filename = "survey_results.csv"
     return StreamingResponse(
         output,
         media_type="text/csv",
-        headers={"Content-Disposition": f"attachment; filename={filename}"}
+        headers={"Content-Disposition": "attachment; filename=survey_results.csv"},
     )
+    
+handler = Mangum(app)
 
