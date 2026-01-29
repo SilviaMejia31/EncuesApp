@@ -162,7 +162,7 @@ branchSelect.addEventListener("change", async () => {
 
 submitBtn.addEventListener("click", async () => {
   try {
-    const branchId = Number(branchSelect.value);
+    const branchId = branchSelect.value;
     if (!branchId) {
       setStatus("Seleccione una sede antes de enviar.", "err");
       return;
